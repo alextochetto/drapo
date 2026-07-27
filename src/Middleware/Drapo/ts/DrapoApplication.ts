@@ -37,6 +37,9 @@
     private _packHandler: DrapoPackHandler;
     private _worker: DrapoWorker;
     private _debugger: DrapoDebugger;
+    private _diagnostics: DrapoDiagnostics;
+    private _introspection: DrapoIntrospection;
+    private _bridge: DrapoBridge;
 
     // Properties
     get IsLoaded(): boolean {
@@ -188,9 +191,22 @@
         return (this._debugger);
     }
 
+    get Diagnostics(): DrapoDiagnostics {
+        return (this._diagnostics);
+    }
+
+    get Introspection(): DrapoIntrospection {
+        return (this._introspection);
+    }
+
+    get Bridge(): DrapoBridge {
+        return (this._bridge);
+    }
+
     // Constructors
     constructor() {
         this._logger = new DrapoLogger(this);
+        this._diagnostics = new DrapoDiagnostics(this);
         this._router = new DrapoRouter(this);
         this._server = new DrapoServer(this);
         this._observer = new DrapoObserver(this);
@@ -226,6 +242,8 @@
         this._packHandler = new DrapoPackHandler(this);
         this._worker = new DrapoWorker(this);
         this._debugger = new DrapoDebugger(this);
+        this._introspection = new DrapoIntrospection(this);
+        this._bridge = new DrapoBridge(this);
     }
 
     public async OnLoad(): Promise<void> {
@@ -258,24 +276,27 @@
     }
 }
 
-window.onload = () => {
+window.addEventListener("load", () => {
     const application: DrapoApplication = new DrapoApplication();
     const windowAny: any = window as any;
     windowAny.drapo = application;
     // tslint:disable-next-line:no-floating-promises
     application.OnLoad();
-};
+});
 
-window.onpopstate = (e : Event) => {
+window.addEventListener("popstate", (e : Event) => {
     const windowAny: any = window as any;
     const application: DrapoApplication = windowAny.drapo as DrapoApplication;
     // tslint:disable-next-line:no-floating-promises
     application.Router.OnPopState(e);
-};
+});
 
 window.addEventListener('message', (event) => {
     const windowAny: any = window as any;
     const application: DrapoApplication = windowAny.drapo as DrapoApplication;
+    const message: any = event.data;
+    if ((message != null) && (typeof message === 'object') && (typeof message.type === 'string') && (message.type.indexOf('drapo-bridge:') === 0))
+        return;
     // tslint:disable-next-line:no-floating-promises
-    application.Document.ReceiveMessage(event.data);
+    application.Document.ReceiveMessage(message);
 }, false);

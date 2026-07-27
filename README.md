@@ -316,6 +316,55 @@ Drapo provides many built-in functions for common operations:
 </div>
 ```
 
+## 🔒 Security
+
+### WebSocket Origin Validation
+
+Drapo automatically validates WebSocket connection origins to prevent Cross-Site WebSocket Hijacking (CSWSH) attacks. By default, only connections from the same origin as your application are allowed.
+
+#### Configuration
+
+You can configure WebSocket origin validation in your `Startup.cs`:
+
+```csharp
+public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
+{
+    app.UseDrapo(options => 
+    {
+        // Enable/disable origin validation (enabled by default)
+        options.Config.ValidateWebSocketOrigin = true;
+        
+        // Optional: Specify allowed origins explicitly
+        // Note: Scheme (http/https) is ignored during validation
+        options.Config.AllowedWebSocketOrigins = new List<string>
+        {
+            "https://yourdomain.com",
+            "https://www.yourdomain.com",
+            "https://subdomain.yourdomain.com"
+        };
+    });
+}
+```
+
+**Gateway Support**: The origin validation automatically supports scenarios where an external gateway or load balancer handles HTTPS, while the internal application runs on HTTP. Only the host/domain portion is compared, not the scheme.
+
+#### Default Behavior
+
+- **Origin validation is enabled by default** for security
+- The current request's host is **always** allowed (scheme-independent to support gateways)
+- If an explicit allow-list is configured, origins in that list are **also** allowed (in addition to the current host)
+- Both `Origin` and `Referer` headers are checked
+- Invalid or missing headers result in connection rejection
+- **Scheme is ignored** during validation - only the host/domain is compared, allowing gateways to handle HTTPS while the internal application uses HTTP
+
+#### Disabling Validation
+
+⚠️ **Not recommended for production**: You can disable origin validation if needed:
+
+```csharp
+options.Config.ValidateWebSocketOrigin = false;
+```
+
 ## 🧪 Testing
 
 Drapo includes a comprehensive testing framework using Selenium WebDriver and NUnit to validate the framework's functionality across different browsers and scenarios.
@@ -403,18 +452,22 @@ We welcome contributions to Drapo! Here's how to get started:
    dotnet build
    ```
 
-4. **Run Tests**:
-   ```bash
-   dotnet test
-   ```
+4. **Run Tests**: the suite is browser-driven (Selenium + NUnit) and needs a running
+   WebDrapo host — start it, then run `dotnet test` with the local run settings. Full
+   step-by-step in **[doc/development.md → Running the tests](doc/development.md#running-the-tests)**.
+
+> 📋 For the complete build/lint/test workflow, conventions, and quality gates, see the
+> **[Development Guide](doc/development.md)**. The project's non-negotiable principles
+> live in the **[constitution](.specify/memory/constitution.md)**.
 
 ### Development Workflow
 
 1. **Create a Feature Branch**: `git checkout -b feature/your-feature-name`
 2. **Make Changes**: Implement your feature or bug fix
-3. **Add Tests**: Ensure your changes are covered by tests
-4. **Build and Test**: Verify everything works correctly
-5. **Submit Pull Request**: Create a PR with a clear description
+3. **Add Tests**: Cover changes with DrapoPages tests (see the [Development Guide](doc/development.md#testing-workflow))
+4. **Build and Lint**: `dotnet build Drapo.sln` and `npx tslint --project tsconfig/production/` must both be clean
+5. **Run the full suite**: every test must pass — **a PR is only approved when all tests pass**
+6. **Submit Pull Request**: Create a PR with a clear description
 
 ### Code Style
 
@@ -437,6 +490,9 @@ When reporting bugs or requesting features:
 - **[Live Demo](http://drapo.azurewebsites.net/)** - Interactive examples and playground
 - **[API Reference](#-api-reference)** - Complete attribute and function documentation
 - **[Examples](#-examples)** - Common usage patterns and code samples
+- **[Documentation Index](doc/README.md)** - All project docs in one place
+- **[Architecture](doc/architecture.md)** - Tech stack, code layout, and build pipeline
+- **[Development Guide](doc/development.md)** - Build, lint, test workflow and conventions
 - **[d-for Documentation](doc/dfor.md)** - Detailed loop syntax guide
 
 ## 📦 Packages & Versions

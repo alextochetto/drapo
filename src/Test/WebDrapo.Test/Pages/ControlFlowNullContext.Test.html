@@ -1,0 +1,17 @@
+<!DOCTYPE html><html xmlns="http://www.w3.org/1999/xhtml"><head>
+    <script src="/drapo.js"></script>
+    <title>Drapo Control Flow Null Context</title>
+</head>
+<body>
+    <h1><span>Control Flow Null Context</span></h1>
+    <div d-datakey="listFull" d-datatype="array" d-datavalue="[1,2]"></div>
+    <div d-datakey="listEmpty" d-datatype="array" d-datavalue="[]"></div>
+    <!-- The switch condition references an unregistered data key: this used to throw (null context) and abort the section render. -->
+    <div d-datakey="listSwitch" d-datatype="switch" d-datavalue="listFull:{{missingKey.Type}}=Folder,listEmpty"></div>
+    <ul style="">
+        <li d-for="item in listSwitch" style="display: none;">I{{item}} </li>
+    <li>I </li></ul>
+    <div d-render="{{missingKey.Type}}!=Folder"><span>Rendered After</span></div>
+
+
+</body></html>

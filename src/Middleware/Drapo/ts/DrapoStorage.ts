@@ -8,6 +8,7 @@ class DrapoStorage {
     private _lock: boolean = false;
     private readonly CHUNK_SIZE: number = 3 * 1024 * 1024;
     private readonly _debounceReloadData: Map<string, number> = new Map<string, number>();
+    private readonly _debounceNotifyData: Map<string, number> = new Map<string, number>();
     //Properties
     get Application(): DrapoApplication {
         return (this._application);
@@ -229,6 +230,37 @@ class DrapoStorage {
         return (dataKeys);
     }
 
+    public GetDataKeys(sector: string = null): string[] {
+        const dataKeys: string[] = [];
+        for (let i: number = this._cacheItems.length - 1; i >= 0; i--) {
+            const storageItem: DrapoStorageItem = this._cacheItems[i];
+            if (storageItem == null)
+                continue;
+            if ((sector != null) && (!this.Application.Document.IsEqualSector(storageItem.Sector, sector)))
+                continue;
+            const dataKey: string = storageItem.DataKey;
+            if (this.Application.Document.IsHiddenKey(dataKey))
+                continue;
+            if (dataKeys.indexOf(dataKey) >= 0)
+                continue;
+            dataKeys.push(dataKey);
+        }
+        const elements: HTMLElement[] = this.Application.Searcher.FindAllByAttribute('d-datakey');
+        for (let i: number = 0; i < elements.length; i++) {
+            const element: HTMLElement = elements[i];
+            const elementSector: string = this.Application.Document.GetSector(element);
+            if ((sector != null) && (!this.Application.Document.IsEqualSector(elementSector, sector)))
+                continue;
+            const dataKey: string = element.getAttribute('d-datakey');
+            if (this.Application.Document.IsHiddenKey(dataKey))
+                continue;
+            if (dataKeys.indexOf(dataKey) >= 0)
+                continue;
+            dataKeys.push(dataKey);
+        }
+        return (dataKeys);
+    }
+
     public async ReloadPipe(dataPipe: string): Promise<boolean> {
         let reloaded = false;
         const storageItems: DrapoStorageItem[] = this._cacheItems.filter((i) => (i.Pipes != null) && (this.Application.Solver.Contains(i.Pipes, dataPipe)));
@@ -245,6 +277,22 @@ class DrapoStorage {
         return (reloaded);
     }
 
+    public async NotifyPipe(dataPipe: string): Promise<boolean> {
+        let notified = false;
+        const storageItems: DrapoStorageItem[] = this._cacheItems.filter((i) => (i.Pipes != null) && (this.Application.Solver.Contains(i.Pipes, dataPipe)));
+        for (const storageItem of storageItems)
+        {
+            if (storageItem.PipesDebounce != null) {
+                if (await this.NotifyDataDebounce(dataPipe + '_' + storageItem.DataKey, storageItem.DataKey, storageItem.PipesDebounce))
+                    notified = true;
+            } else {
+                await this.Application.Observer.Notify(storageItem.DataKey, null, null);
+                notified = true;
+            }
+        }
+        return (notified);
+    }
+
     private async ReloadDataDebounce(debounceKey: string, dataKey: string, timeout: number): Promise<boolean> {
         if (this._debounceReloadData.has(debounceKey)) {
             clearTimeout(this._debounceReloadData.get(debounceKey));
@@ -254,6 +302,19 @@ class DrapoStorage {
             clearTimeout(this._debounceReloadData.get(debounceKey));
             this._debounceReloadData.delete(debounceKey);
             await this.ReloadData(dataKey, null);
+        }, timeout));
+        return (false);
+    }
+
+    private async NotifyDataDebounce(debounceKey: string, dataKey: string, timeout: number): Promise<boolean> {
+        if (this._debounceNotifyData.has(debounceKey)) {
+            clearTimeout(this._debounceNotifyData.get(debounceKey));
+            this._debounceNotifyData.delete(debounceKey);
+        }
+        this._debounceNotifyData.set(debounceKey, setTimeout(async () => {
+            clearTimeout(this._debounceNotifyData.get(debounceKey));
+            this._debounceNotifyData.delete(debounceKey);
+            await this.Application.Observer.Notify(dataKey, null, null);
         }, timeout));
         return (false);
     }
@@ -2261,6 +2322,9 @@ class DrapoStorage {
         //Order By
         if (query.Sorts != null)
             objects = this.ResolveQueryOrderBy(query, objects);
+        //Distinct
+        if (query.Distinct)
+            objects = this.ResolveQueryDistinct(query, objects);
         return (objects);
     }
 
@@ -2430,7 +2494,53 @@ class DrapoStorage {
             objectAggregation[query.Projections[0].Alias] = this.ResolveQueryAggregationsMin(query, query.Projections[0], objects, objectsInformation);
             return (objectAggregation);
         }
+        if (query.Projections[0].FunctionName === 'SUM') {
+            const objectAggregation: any = {};
+            objectAggregation[query.Projections[0].Alias] = this.ResolveQueryAggregationsSum(query, query.Projections[0], objects, objectsInformation);
+            return (objectAggregation);
+        }
+        if (query.Projections[0].FunctionName === 'AVG') {
+            const objectAggregation: any = {};
+            objectAggregation[query.Projections[0].Alias] = this.ResolveQueryAggregationsAvg(query, query.Projections[0], objects, objectsInformation);
+            return (objectAggregation);
+        }
         return (null);
+    }
+
+    private ResolveQueryAggregationsSum(query: DrapoQuery, projection: DrapoQueryProjection, objects: any[], objectsInformation: any[]): string {
+        let sum: number = 0;
+        let hasValue: boolean = false;
+        const functionParameter: string = projection.FunctionParameters[0];
+        const functionParameterName: string = this.ResolveQueryFunctionParameterName(functionParameter);
+        for (let i: number = 0; i < objectsInformation.length; i++) {
+            const valueCurrent: any = objectsInformation[i][functionParameterName];
+            if (valueCurrent == null)
+                continue;
+            const valueNumber: number = Number(valueCurrent);
+            if (isNaN(valueNumber))
+                continue;
+            sum += valueNumber;
+            hasValue = true;
+        }
+        return (hasValue ? this.Application.Solver.EnsureString(sum) : null);
+    }
+
+    private ResolveQueryAggregationsAvg(query: DrapoQuery, projection: DrapoQueryProjection, objects: any[], objectsInformation: any[]): string {
+        let sum: number = 0;
+        let count: number = 0;
+        const functionParameter: string = projection.FunctionParameters[0];
+        const functionParameterName: string = this.ResolveQueryFunctionParameterName(functionParameter);
+        for (let i: number = 0; i < objectsInformation.length; i++) {
+            const valueCurrent: any = objectsInformation[i][functionParameterName];
+            if (valueCurrent == null)
+                continue;
+            const valueNumber: number = Number(valueCurrent);
+            if (isNaN(valueNumber))
+                continue;
+            sum += valueNumber;
+            count++;
+        }
+        return (count > 0 ? this.Application.Solver.EnsureString(sum / count) : null);
     }
 
     private ResolveQueryAggregationsMax(query: DrapoQuery, projection: DrapoQueryProjection, objects: any[], objectsInformation: any[]): string {
@@ -2633,5 +2743,25 @@ class DrapoStorage {
         if (sort.Type == 'DESC')
             value = 0 - value;
         return (value);
+    }
+
+    private ResolveQueryDistinct(query: DrapoQuery, objects: any[]): any[] {
+        if ((objects == null) || (objects.length === 0))
+            return (objects);
+        const uniqueObjects: any[] = [];
+        const seenKeys: Set<string> = new Set<string>();
+        for (let i: number = 0; i < objects.length; i++) {
+            const object: any = objects[i];
+            const key: string = this.GetObjectDistinctKey(object);
+            if (seenKeys.has(key))
+                continue;
+            seenKeys.add(key);
+            uniqueObjects.push(object);
+        }
+        return (uniqueObjects);
+    }
+
+    private GetObjectDistinctKey(object: any): string {
+        return (JSON.stringify(object));
     }
 }

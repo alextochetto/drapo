@@ -168,7 +168,7 @@ class DrapoFunctionHandler {
             return (value);
         const valueReplaceMustache: string = parameter.replace(mustaches[0], value);
         //Recursive
-        return (await this.ResolveFunctionParameter(sector, contextItem, element, executionContext, valueReplaceMustache));
+        return (await this.ResolveFunctionParameter(sector, contextItem, element, executionContext, valueReplaceMustache, canForceLoadDataDelay));
     }
 
     public ResolveExecutionContextMustache(sector: string, executionContext: DrapoExecutionContext<any>, value: string): string {
@@ -995,8 +995,12 @@ class DrapoFunctionHandler {
         const packName: string = await this.ResolveFunctionParameter(sector, contextItem, element, executionContext, functionParsed.Parameters[0]);
         if ((packName == null) || (packName == ''))
             return ('');
-        // Use the dedicated PackHandler to load the pack
-        await this.Application.PackHandler.LoadPack(packName);
+        let skipLocalCache: boolean = false;
+        if (functionParsed.Parameters.length > 1) {
+            const skipLocalCacheText: string = await this.ResolveFunctionParameter(sector, contextItem, element, executionContext, functionParsed.Parameters[1]);
+            skipLocalCache = ((skipLocalCacheText != null) && (skipLocalCacheText != '')) ? await this.Application.Solver.ResolveConditional(skipLocalCacheText) : false;
+        }
+        await this.Application.PackHandler.LoadPack(packName, skipLocalCache);
         return ('');
     }
 
@@ -1129,7 +1133,9 @@ class DrapoFunctionHandler {
 
     private async ExecuteFunctionUpdateURL(sector: string, contextItem: DrapoContextItem, element: HTMLElement, event: Event, functionParsed: DrapoFunction, executionContext: DrapoExecutionContext<any>): Promise<string> {
         const url: string = await this.ResolveFunctionParameter(sector, contextItem, element, executionContext, functionParsed.Parameters[0]);
-        await this.Application.Router.UpdateURL(url);
+        const addToHistoryText: string = functionParsed.Parameters.length > 1 ? await this.ResolveFunctionParameter(sector, contextItem, element, executionContext, functionParsed.Parameters[1]) : null;
+        const addToHistory: boolean = ((addToHistoryText == null) || (addToHistoryText == '')) ? true : await this.Application.Solver.ResolveConditional(addToHistoryText);
+        await this.Application.Router.UpdateURL(url, addToHistory);
         return ('');
     }
 

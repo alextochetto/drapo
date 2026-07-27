@@ -319,7 +319,8 @@ class DrapoBarber {
                 //Bind
                 if (canBind) {
                     if (isForIterator) {
-                        this.Application.Observer.SubscribeLink(dataKey, context.GetDataKeyRoot(), dataFields);
+                        if (context != null)
+                            this.Application.Observer.SubscribeLink(dataKey, context.GetDataKeyRoot(), dataFields);
                     } else {
                         const contextDataKey: DrapoContext = new DrapoContext();
                         const data: any = await this.Application.Storage.RetrieveData(dataKey, sector);
@@ -332,7 +333,11 @@ class DrapoBarber {
                 expression = expression.replace(mustache, mustacheData);
             } else {
                 //Context
-                let mustacheData = context.Item === null ? '' : await this.Application.Solver.ResolveDataPath(context, executionContext, element, sector, mustacheParts, canBind);
+                //A null context must resolve like an empty context: conditional expressions
+                //(d-if/d-render/switch conditions) are evaluated without a context, and a mustache
+                //over an unregistered data key used to throw here, aborting the whole section
+                //render (windows lost their remaining processing, including event attachment).
+                let mustacheData = ((context == null) || (context.Item === null)) ? '' : await this.Application.Solver.ResolveDataPath(context, executionContext, element, sector, mustacheParts, canBind);
                 mustacheData = this.Application.Solver.EnsureString(mustacheData);
                 expression = expression.replace(mustache, mustacheData);
             }
