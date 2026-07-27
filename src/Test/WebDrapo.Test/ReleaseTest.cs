@@ -463,6 +463,11 @@ namespace WebDrapo.Test
             ValidatePage("ForConsecutiveMixed");
         }
         [TestCase]
+        public void ControlFlowNullContextTest()
+        {
+            ValidatePage("ControlFlowNullContext");
+        }
+        [TestCase]
         public void ControlFlowForArrayNotifyTest()
         {
             ValidatePage("ControlFlowForArrayNotify");
